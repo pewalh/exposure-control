@@ -86,10 +86,13 @@
     <None Include="settings.yaml" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="exposure-control.cpp" />
+    <ClCompile Include="exposure-calculator.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="timer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="colors.h" />
+    <ClInclude Include="exposure-calculator.h" />
     <ClInclude Include="timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

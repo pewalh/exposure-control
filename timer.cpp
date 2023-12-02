@@ -1,6 +1,6 @@
 #include "timer.h"
 #include <chrono>
-
+#include <cstdint>
 
 Timer::Timer() {
 	running = false;
@@ -26,40 +26,40 @@ bool Timer::isRunning() {
 	return running;
 }
 
-long long Timer::getElapsedNano() {
+uint64_t Timer::getElapsedNano() {
 	if (running) {
 		auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
 		return std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
 	}
 	else {
-		return 0.0;
+		return 0;
 	}
 }
 
-long long Timer::getElapsedMilli() {
+uint64_t Timer::getElapsedMilli() {
 	if (running) {
 		auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
 		return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 	}
 	else {
-		return 0.0;
+		return 0;
 	}
 }
 
-long long Timer::getElapsedSeconds() {
+uint64_t Timer::getElapsedSeconds() {
 	if (running) {
 		auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
 		return std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
 	}
 	else {
-		return 0.0;
+		return 0;
 	}
 }
 
-void Timer::getElapsedTime(long& days, long& hours, long& minutes, long& seconds, long& milliseconds, long& microseconds, long& nanoseconds) {
+void Timer::getElapsedTime(int& days, int& hours, int& minutes, int& seconds, int& milliseconds, int& microseconds, int& nanoseconds) {
 	if (running) {
 		auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
-		long long _nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+		uint64_t _nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
 		nanoseconds = _nanoseconds % 1000;
 		microseconds = (_nanoseconds / 1000) % 1000;
 		milliseconds = (_nanoseconds / 1000000) % 1000;

@@ -1,12 +1,17 @@
-#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <cstdint>
+
+#include <opencv2/opencv.hpp>
 
 #include "timer.h"
+#include "exposure-calculator.h"
+#include "colors.h"
+
 
 
 #define DEFAULT_SETTINGS_FILE "./settings.yaml"
@@ -35,9 +40,9 @@ int main(int argc, char** argv) {
 		if (arg == "-h" || arg == "--help") {
 			std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
 			std::cout << "Options:" << std::endl;
-			std::cout << "  -h, --help\t\t\tShow this help message and exit" << std::endl;
-			std::cout << "  -s, --settings <filename>\tSpecify path to settings file (default: \"" << DEFAULT_SETTINGS_FILE << "\")" << std::endl;
-            std::cout << "  -n, --no-window\t\t\tDisable window with processing info" << std::endl;         
+			std::cout << "  -h, --help                  Show this help message and exit" << std::endl;
+			std::cout << "  -s, --settings <filename>   Specify path to settings file (default: \"" << DEFAULT_SETTINGS_FILE << "\")" << std::endl;
+            std::cout << "  -n, --no-window             Disable window with processing info" << std::endl;         
 			return 0;
 		}
 		else if (arg == "-s" || arg == "--settings") {
@@ -130,8 +135,11 @@ int main(int argc, char** argv) {
 		cv::namedWindow(APP_NAME, cv::WINDOW_AUTOSIZE);
 	}
 
-    int exposureExponent = -11;
+    ExposureCalculator exposureCalculator;
 
+    // starting time
+    uint64_t time_ms = timer.getElapsedMilli();
+    
     int returnCode = 0;
     while (true) {
     
@@ -143,6 +151,7 @@ int main(int argc, char** argv) {
 
         // Capture frame-by-frame
         cap >> frame;
+
         // If the frame is empty, break the loop
         if (frame.empty()) {
             std::cerr << "Error: Could not capture fram from camera" << std::endl;
@@ -150,36 +159,44 @@ int main(int argc, char** argv) {
             break;
         }
 
-        // get timestamp in milliseconds
-        long seconds = timer.getElapsedSeconds();
-        std::cout << "seconds: " << seconds << std::endl;
-        
+        // mirror the frame
+        cv::flip(frame, frame, 1);
 
-        
-        // Display the resulting frame
-        if (true) {
-            imshow(APP_NAME, frame);
+
+        int exposureChangeSuggestion = exposureCalculator.getExposureUpDown(frame);
+        // print the current exposure in the top left corner
+        cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+
+        // Display the resulting frame mirrorred
+        if (showWindow) {
+            
+            cv::imshow(APP_NAME, frame);
             key = cv::waitKey(20); // allow window to redraw
         }
-                // now sleep for frameTimeMs milliseconds
-        if (frameTimeMs > 20) {
-			std::this_thread::sleep_for(std::chrono::milliseconds((int)(frameTimeMs-20)));
+        
+        if (exposureChangeSuggestion != 0) {
+            exposure += exposureChangeSuggestion;
+            if (exposure < -11) {
+                exposure = -11;
+            }
+            else if (exposure > -2) {
+                exposure = -2;
+            }
+            else
+            {
+                std::cout << "Exposure changed to: " << exposure << std::endl;
+                cap.set(cv::CAP_PROP_EXPOSURE, exposure);
+            }
         }
 
-
-
-
-
-
-        // loop through exposure values [-11 to -2]
-        exposureExponent++;
-        if (exposureExponent > -2) {
-			exposureExponent = -11;
-		}
-        cap.set(cv::CAP_PROP_EXPOSURE, exposureExponent);
-        std::cout << "exposure exponent: " << exposureExponent << std::endl;
-
-
+        
+        // now sleep until frameTimeMs milliseconds has passed since t0
+        uint64_t t0 = time_ms;
+        time_ms = timer.getElapsedMilli();
+        uint64_t sleepTimeMs = frameTimeMs - (time_ms - t0);
+        if (sleepTimeMs > 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(sleepTimeMs));
+        }
     }
 
     // When everything done, release the video capture object and close all windows
