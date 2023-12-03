@@ -7,12 +7,10 @@
 class ExposureCalculator
 {
 public:
-	ExposureCalculator(float saturationLimit = 0.05f);
+	ExposureCalculator();
 	~ExposureCalculator();
 	
-	int getExposureUpDown(cv::Mat& image);
+	void getExposureUpDown(cv::Mat& image, int& exposureChange, int& gainChange);
 
-private:
-	float saturationLimit;
 };
 

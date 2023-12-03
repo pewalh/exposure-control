@@ -1,7 +1,7 @@
 %YAML:1.0
 ---
 exposure: -4
-gain: 128
+gain: 140
 contrast: 140
-sharpness: 160
-frameTimeMs: 100
+sharpness: 180
+frameTimeMs: 800

@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
     	std::cerr << "Error while reading settings.yaml: " << e.what() << std::endl; 
     }
     
-
+    double defaultGain = gain;
     // Set default camera settings
     cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 0); // Disable auto exposure
     cap.set(cv::CAP_PROP_EXPOSURE, exposure); // Set exposure exponent, e.g. -4 => 2^-4 = 1/16 seconds
@@ -163,17 +163,27 @@ int main(int argc, char** argv) {
         cv::flip(frame, frame, 1);
 
 
-        int exposureChangeSuggestion = exposureCalculator.getExposureUpDown(frame);
+        int exposureChangeSuggestion;
+        int gainChangeSuggestion;
+        exposureCalculator.getExposureUpDown(frame, exposureChangeSuggestion, gainChangeSuggestion);
         // print the current exposure in the top left corner
         cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+        cv::putText(frame, "Gain: " + std::to_string((int)gain), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
 
         // Display the resulting frame mirrorred
         if (showWindow) {
             
             cv::imshow(APP_NAME, frame);
-            key = cv::waitKey(20); // allow window to redraw
+            key = cv::waitKey(5); // allow window to redraw
         }
         
+
+        bool setGain = false;
+        bool setExposure = false;
+
+        
+
+        // adjust exposure and gain
         if (exposureChangeSuggestion != 0) {
             exposure += exposureChangeSuggestion;
             if (exposure < -11) {
@@ -182,21 +192,75 @@ int main(int argc, char** argv) {
             else if (exposure > -2) {
                 exposure = -2;
             }
-            else
-            {
-                std::cout << "Exposure changed to: " << exposure << std::endl;
-                cap.set(cv::CAP_PROP_EXPOSURE, exposure);
+            else {
+                setExposure = true;
             }
         }
 
-        
-        // now sleep until frameTimeMs milliseconds has passed since t0
-        uint64_t t0 = time_ms;
-        time_ms = timer.getElapsedMilli();
-        uint64_t sleepTimeMs = frameTimeMs - (time_ms - t0);
-        if (sleepTimeMs > 0) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(sleepTimeMs));
+        if (gainChangeSuggestion != 0) {
+            gain += gainChangeSuggestion;
+            if (gain < 0) {
+                gain = 0;
+            }
+            else if (gain > 255) {
+                gain = 255;
+            }
+            else {
+                setGain = true;
+            }
         }
+        
+
+        // balance exposure and gain
+        if (gain > 226 && exposure < -2) {
+            exposure++;
+            gain = defaultGain;
+            setExposure = true;
+            setGain = true;
+        }
+        else if (gain < 30 && exposure > -11) {
+            exposure--;
+            gain = defaultGain;
+            setExposure = true;
+            setGain = true;
+        }
+
+
+        if (setExposure) {
+            cap.set(cv::CAP_PROP_EXPOSURE, exposure);
+        }
+        if (setGain) {
+            cap.set(cv::CAP_PROP_GAIN, gain);
+        }
+
+        // now just loop frames until frameTimeMs milliseconds has passed since t0, without changing exposure
+        uint64_t t0 = time_ms;
+        while (true) {
+            
+            // Break the loop if the window has been closed
+            if (showWindow && (cv::getWindowProperty(APP_NAME, cv::WND_PROP_VISIBLE) < 1)) {
+                break;
+            }
+            cap >> frame;
+            cv::flip(frame, frame, 1);
+            int _exp, _gain;
+            exposureCalculator.getExposureUpDown(frame, _exp, _gain);
+            cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+            cv::putText(frame, "Gain: " + std::to_string((int)gain), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+            if (showWindow) {
+                cv::imshow(APP_NAME, frame);
+            }
+
+            cv::waitKey(5);
+            // sleep for 50 ms
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            time_ms = timer.getElapsedMilli();
+            if ((time_ms - t0) >= frameTimeMs)
+                break;
+            
+        }
+
+
     }
 
     // When everything done, release the video capture object and close all windows
