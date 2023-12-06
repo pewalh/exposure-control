@@ -20,6 +20,129 @@
 
 
 
+
+struct Args {
+    std::string settingsFile;
+    bool showWindow;
+};
+
+
+/// <summary>
+/// Parse command line arguments
+/// Returns true if successful, false if program should exit
+/// </summary>
+bool parseArgs(int argc, char** argv, Args& args, bool& error) {
+    args.settingsFile = DEFAULT_SETTINGS_FILE;
+    args.showWindow = true;
+    error = false;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
+            std::cout << "Options:" << std::endl;
+            std::cout << "  -h, --help                  Show this help message and exit" << std::endl;
+            std::cout << "  -s, --settings <filename>   Specify path to settings file (default: \"" << DEFAULT_SETTINGS_FILE << "\")" << std::endl;
+            std::cout << "  -n, --no-window             Disable window with processing info" << std::endl;
+            return false;
+        }
+        else if (arg == "-s" || arg == "--settings") {
+            if (i + 1 < argc) {
+                std::string filename = argv[++i];
+                std::cout << "Settings file: " << filename << std::endl;
+                if (!std::filesystem::exists(filename)) {
+                    std::cerr << "Error: Settings file does not exist" << std::endl;
+                    error = true;
+                    return false;
+                }
+            }
+            else {
+                std::cerr << "Error: Settings file must be specified together with -s/--settings" << std::endl;
+                error = true;
+                return false;
+            }
+        }
+        else if (arg == "-n" || arg == "--no-window") {
+            args.showWindow = false;
+        }
+
+        else {
+            std::cerr << "Error: Unknown argument '" << arg << "'" << std::endl;
+            error = true;
+            return false;
+        }
+    }
+    return true;
+}
+
+
+
+struct Settings {
+    double exposure;
+    double gain;
+    double contrast;
+    double sharpness;
+};
+
+/// <summary>
+/// Read settings from yaml file (opencv format)
+/// </summary>
+bool readSettingsFile(std::string fpath, Settings& settings)
+{
+    cv::FileStorage fs;
+    try {
+        cv::FileStorage fs = cv::FileStorage("./settings.yaml", cv::FileStorage::READ);
+        if (!fs.isOpened()) {
+            std::cerr << "Error: Could not open settings.yaml" << std::endl;
+            return -1;
+        }
+        fs["exposure"] >> settings.exposure;
+        fs["gain"] >> settings.gain;
+        fs["contrast"] >> settings.contrast;
+        fs["sharpness"] >> settings.sharpness;
+        fs.release();
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error while reading settings.yaml: " << e.what() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+
+
+
+
+
+void captureFrame(
+    cv::VideoCapture& cap, 
+    cv::Mat& frame, 
+    ExposureCalculator& exposureCalculator,
+    double& exposure,
+    double& gain,
+    int& exposureChangeSuggestion,
+    int& gainChangeSuggestion,
+    bool showWindow)
+{
+    cap >> frame;
+    cv::flip(frame, frame, 1);
+    exposureCalculator.getExposureUpDown(frame, exposureChangeSuggestion, gainChangeSuggestion);
+    cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+    cv::putText(frame, "Gain: " + std::to_string((int)gain), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+    if (showWindow) {
+        cv::imshow(APP_NAME, frame);
+        cv::waitKey(5);
+    }
+}
+
+
+
+
+
+
+
+
+
 int main(int argc, char** argv) {
     
     // print version number and github link
@@ -32,42 +155,18 @@ int main(int argc, char** argv) {
 
 
     // Parse command line arguments
-    std::string settingsFile = DEFAULT_SETTINGS_FILE;
-    bool showWindow = true;
+    Args args;
+    bool error = false;
+    if (!parseArgs(argc, argv, args, error))
+        return error ? -1 : 0;
+    
 
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-		if (arg == "-h" || arg == "--help") {
-			std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
-			std::cout << "Options:" << std::endl;
-			std::cout << "  -h, --help                  Show this help message and exit" << std::endl;
-			std::cout << "  -s, --settings <filename>   Specify path to settings file (default: \"" << DEFAULT_SETTINGS_FILE << "\")" << std::endl;
-            std::cout << "  -n, --no-window             Disable window with processing info" << std::endl;         
-			return 0;
-		}
-		else if (arg == "-s" || arg == "--settings") {
-			if (i + 1 < argc) {
-				std::string filename = argv[++i];
-				std::cout << "Settings file: " << filename << std::endl;
-				if (!std::filesystem::exists(filename)) {
-					std::cerr << "Error: Settings file does not exist" << std::endl;
-					return -1;
-				}
-			}
-			else {
-				std::cerr << "Error: Settings file must be specified together with -s/--settings" << std::endl;
-				return -1;
-			}
-		}
-        else if (arg == "-n" || arg == "--no-window") {
-			showWindow = false;
-		}
-        
-		else {
-			std::cerr << "Error: Unknown argument '" << arg << "'" << std::endl;
-			return -1;
-		}
-	}
+    
+    // Read yaml file with default camera settings
+    Settings settings;
+    if (!readSettingsFile(args.settingsFile, settings)) {
+        return -1;
+    }
 
 
 
@@ -80,44 +179,22 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Read yaml file with default camera settings
 
-    double exposure;
-    double gain;
-    double contrast;
-    double sharpness;
-    double frameTimeMs;
-    cv::FileStorage fs;
-    try {
-        cv::FileStorage fs = cv::FileStorage("./settings.yaml", cv::FileStorage::READ);
-    	if (!fs.isOpened()) {
-        		std::cerr << "Error: Could not open settings.yaml" << std::endl;
-        		return -1;
-   		}
-    	fs["exposure"] >> exposure;
-    	fs["gain"] >> gain;
-    	fs["contrast"] >> contrast;
-        fs["sharpness"] >> sharpness;
-        fs["frameTimeMs"] >> frameTimeMs;
-    	fs.release();
-    }
-    catch (const std::exception& e) {
-    	std::cerr << "Error while reading settings.yaml: " << e.what() << std::endl; 
-    }
-    
-    double defaultGain = gain;
+    double defaultGain = settings.gain;
     // Set default camera settings
     cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 0); // Disable auto exposure
-    cap.set(cv::CAP_PROP_EXPOSURE, exposure); // Set exposure exponent, e.g. -4 => 2^-4 = 1/16 seconds
-    cap.set(cv::CAP_PROP_GAIN, gain);
-    cap.set(cv::CAP_PROP_CONTRAST, contrast);
-    cap.set(cv::CAP_PROP_SHARPNESS, sharpness);
+    cap.set(cv::CAP_PROP_EXPOSURE, settings.exposure); // Set exposure exponent, e.g. -4 => 2^-4 = 1/16 seconds
+    cap.set(cv::CAP_PROP_GAIN, settings.gain);
+    cap.set(cv::CAP_PROP_CONTRAST, settings.contrast);
+    cap.set(cv::CAP_PROP_SHARPNESS, settings.sharpness);
 
 
 
     cv::Mat frame;
     char key = -1;
 
+    double gain = settings.gain;
+    double exposure = settings.exposure;
 
 
 
@@ -130,7 +207,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    if (showWindow) {
+    if (args.showWindow) {
 		// Create a window to display the frame
 		cv::namedWindow(APP_NAME, cv::WINDOW_AUTOSIZE);
 	}
@@ -144,44 +221,20 @@ int main(int argc, char** argv) {
     while (true) {
     
         // Break the loop if the window has been closed
-        if (showWindow && (cv::getWindowProperty(APP_NAME, cv::WND_PROP_VISIBLE) < 1)) {
+        if (args.showWindow && (cv::getWindowProperty(APP_NAME, cv::WND_PROP_VISIBLE) < 1)) {
             break;
         }
-
-
-        // Capture frame-by-frame
-        cap >> frame;
-
-        // If the frame is empty, break the loop
-        if (frame.empty()) {
-            std::cerr << "Error: Could not capture fram from camera" << std::endl;
-            returnCode = -1;
-            break;
-        }
-
-        // mirror the frame
-        cv::flip(frame, frame, 1);
-
 
         int exposureChangeSuggestion;
         int gainChangeSuggestion;
-        exposureCalculator.getExposureUpDown(frame, exposureChangeSuggestion, gainChangeSuggestion);
-        // print the current exposure in the top left corner
-        cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
-        cv::putText(frame, "Gain: " + std::to_string((int)gain), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
+        captureFrame(cap, frame, exposureCalculator, exposure, gain, exposureChangeSuggestion, gainChangeSuggestion, args.showWindow);
 
-        // Display the resulting frame mirrorred
-        if (showWindow) {
-            
-            cv::imshow(APP_NAME, frame);
-            key = cv::waitKey(5); // allow window to redraw
-        }
-        
+
+
 
         bool setGain = false;
         bool setExposure = false;
-
-        
+       
 
         // adjust exposure and gain
         if (exposureChangeSuggestion != 0) {
@@ -238,24 +291,21 @@ int main(int argc, char** argv) {
         while (true) {
             
             // Break the loop if the window has been closed
-            if (showWindow && (cv::getWindowProperty(APP_NAME, cv::WND_PROP_VISIBLE) < 1)) {
+            if (args.showWindow && (cv::getWindowProperty(APP_NAME, cv::WND_PROP_VISIBLE) < 1)) {
                 break;
             }
-            cap >> frame;
-            cv::flip(frame, frame, 1);
-            int _exp, _gain;
-            exposureCalculator.getExposureUpDown(frame, _exp, _gain);
-            cv::putText(frame, "Exposure: " + std::to_string((int)exposure), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
-            cv::putText(frame, "Gain: " + std::to_string((int)gain), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, TEXTCOLOR, 1, cv::LINE_AA);
-            if (showWindow) {
-                cv::imshow(APP_NAME, frame);
-            }
 
-            cv::waitKey(5);
-            // sleep for 50 ms
+            int _exp, _gain;
+            captureFrame(cap, frame, exposureCalculator, exposure, gain, _exp, _gain, args.showWindow);
+            
+            // suspend thread for a while (will not check keys here, but we arent using keys on the window)
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             time_ms = timer.getElapsedMilli();
-            if ((time_ms - t0) >= frameTimeMs)
+
+            // ensure that we have waited at least 1.5 times the exposure time
+            double exposureTimeMs = std::pow(2, exposure) * 1000;
+
+            if ((time_ms - t0) >= exposureTimeMs*1.5)
                 break;
             
         }
