@@ -4,3 +4,4 @@ exposure: -4
 gain: 140
 contrast: 140
 sharpness: 180
+haarCascadeParamFile: "./haarcascade_frontalface_default.xml"

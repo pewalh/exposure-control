@@ -82,6 +82,7 @@ struct Settings {
     double gain;
     double contrast;
     double sharpness;
+    std::string haarCascadeParamFile;
 };
 
 /// <summary>
@@ -100,6 +101,7 @@ bool readSettingsFile(std::string fpath, Settings& settings)
         fs["gain"] >> settings.gain;
         fs["contrast"] >> settings.contrast;
         fs["sharpness"] >> settings.sharpness;
+        fs["haarCascadeParamFile"] >> settings.haarCascadeParamFile;
         fs.release();
     }
     catch (const std::exception& e) {
@@ -212,7 +214,7 @@ int main(int argc, char** argv) {
 		cv::namedWindow(APP_NAME, cv::WINDOW_AUTOSIZE);
 	}
 
-    ExposureCalculator exposureCalculator;
+    ExposureCalculator exposureCalculator(settings.haarCascadeParamFile);
 
     // starting time
     uint64_t time_ms = timer.getElapsedMilli();

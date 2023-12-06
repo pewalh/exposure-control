@@ -7,10 +7,12 @@
 class ExposureCalculator
 {
 public:
-	ExposureCalculator();
+	ExposureCalculator(std::string haarCascadeParamFile);
 	~ExposureCalculator();
 	
 	void getExposureUpDown(cv::Mat& image, int& exposureChange, int& gainChange);
 
+private:
+	cv::CascadeClassifier faceCascade;
 };
 

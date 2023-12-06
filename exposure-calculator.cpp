@@ -4,7 +4,8 @@
 #include "colors.h"
 
 
-ExposureCalculator::ExposureCalculator() {
+ExposureCalculator::ExposureCalculator(std::string haarCascadeParamFile) {
+    faceCascade.load(haarCascadeParamFile);
 }
 
 ExposureCalculator::~ExposureCalculator() {
@@ -20,9 +21,6 @@ void ExposureCalculator::getExposureUpDown(cv::Mat& image, int& exposureChange, 
     cv::Mat gray;
     cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
 
-    // Load face cascade
-    cv::CascadeClassifier faceCascade;
-    faceCascade.load("./haarcascade_frontalface_default.xml");
 
     // Detect faces
     std::vector<cv::Rect> faces;
